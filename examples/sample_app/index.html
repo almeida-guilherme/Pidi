@@ -1,0 +1,141 @@
+<!doctype html>
+<!-- An invented finance portal, only for recording Pidi's example (examples/make_sample.py). Every company, person,
+     invoice and amount here is made up. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Brightleaf Finance Portal</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 "Noto Sans", "DejaVu Sans", Arial, sans-serif; color: #1f2a33; background: #eef2f4; }
+  header { background: #14532d; color: #fff; display: flex; align-items: center; gap: 28px; padding: 0 28px; height: 56px; }
+  header .brand { font-weight: 700; font-size: 18px; }
+  header nav a { color: #d1fae5; text-decoration: none; margin-right: 20px; }
+  header nav a.on { color: #fff; font-weight: 700; border-bottom: 2px solid #86efac; padding-bottom: 4px; }
+  header .user { margin-left: auto; font-size: 14px; color: #d1fae5; }
+  main { padding: 28px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 18px; }
+  .panel { background: #fff; border: 1px solid #d7dee3; border-radius: 8px; padding: 22px; margin-bottom: 18px; }
+  .login { width: 380px; margin: 110px auto; }
+  label { display: block; font-size: 13px; color: #4b5b66; margin: 12px 0 4px; }
+  input, select, textarea { width: 100%; padding: 9px 10px; font: inherit; border: 1px solid #b9c4cb; border-radius: 6px; background: #fff; }
+  textarea { height: 70px; resize: none; }
+  button { font: inherit; padding: 9px 18px; border-radius: 6px; border: 1px solid #14532d; background: #15803d; color: #fff; cursor: pointer; }
+  button.secondary { background: #fff; color: #14532d; }
+  button.danger { background: #b45309; border-color: #92400e; }
+  .row { display: flex; gap: 12px; align-items: end; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .tile .n { font-size: 30px; font-weight: 700; color: #14532d; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e3e8eb; }
+  th { font-size: 13px; color: #4b5b66; background: #f6f8f9; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.link td { cursor: pointer; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .pending { background: #fef3c7; color: #92400e; } .approved { background: #dcfce7; color: #166534; }
+  .flagged { background: #fee2e2; color: #991b1b; } .paid { background: #e0e7ff; color: #3730a3; }
+  dl { display: grid; grid-template-columns: 190px 1fr; gap: 8px 16px; margin: 0; }
+  dt { color: #4b5b66; } dd { margin: 0; font-weight: 600; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .actions { display: flex; gap: 12px; margin-top: 18px; }
+  .toast { position: fixed; right: 28px; bottom: 28px; background: #14532d; color: #fff; padding: 14px 20px; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+  .modal-bg { position: fixed; inset: 0; background: rgba(15, 23, 30, .45); display: flex; align-items: center; justify-content: center; }
+  .modal { background: #fff; border-radius: 10px; padding: 24px; width: 460px; }
+  .modal h2 { margin: 0 0 6px; font-size: 19px; }
+  .muted { color: #4b5b66; font-size: 13px; }
+  #cursor { position: fixed; left: 0; top: 0; width: 20px; height: 20px; pointer-events: none; z-index: 99; transition: transform .25s ease; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<svg id="cursor" viewBox="0 0 20 20"><path d="M2 1 L2 16 L6 12 L9 19 L12 18 L9 11 L15 11 Z" fill="#000" stroke="#fff" stroke-width="1.2"/></svg>
+<script>
+const INVOICES = [
+  { id: "INV-20431", vendor: "Cedar Office Furniture", date: "2026-11-12", due: "2026-12-12", amount: 4820.00, po: "PO-7781", poAmount: 4820.00, status: "Pending approval", items: "12 ergonomic chairs" },
+  { id: "INV-20437", vendor: "Blue Harbor Logistics", date: "2026-11-14", due: "2026-12-14", amount: 1260.50, po: "PO-7795", poAmount: 1150.00, status: "Pending approval", items: "Freight, Santos to Campinas" },
+  { id: "INV-20422", vendor: "Greenfield Paper Co.", date: "2026-11-05", due: "2026-12-05", amount: 312.40, po: "PO-7760", poAmount: 312.40, status: "Approved", items: "40 boxes of A4 paper" },
+  { id: "INV-20410", vendor: "Northpoint IT Services", date: "2026-10-28", due: "2026-11-27", amount: 2150.00, po: "PO-7741", poAmount: 2150.00, status: "Paid", items: "Laptop repairs, October" },
+  { id: "INV-20440", vendor: "Sunrise Catering", date: "2026-11-17", due: "2026-12-17", amount: 685.00, po: "PO-7802", poAmount: 685.00, status: "Pending approval", items: "Team lunch, 25 people" },
+];
+const money = n => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2 });
+const cls = s => ({ "Pending approval": "pending", "Approved": "approved", "Flagged": "flagged", "Paid": "paid" })[s];
+let state = { page: "login", filter: "All", open: null, modal: null, toast: null };
+const set = patch => { state = { ...state, ...patch }; render(); };
+
+function header(on) {
+  return `<header><span class="brand">Brightleaf Finance Portal</span><nav>
+    <a href="#" id="nav-home" class="${on === "home" ? "on" : ""}">Home</a>
+    <a href="#" id="nav-invoices" class="${on === "invoices" ? "on" : ""}">Invoices</a>
+    <a href="#" class="">Vendors</a><a href="#" class="">Reports</a></nav>
+    <span class="user">Maria Santos · Accounts Payable</span></header>`;
+}
+
+function render() {
+  const s = state, app = document.getElementById("app");
+  if (s.page === "login") {
+    app.innerHTML = `<div class="panel login"><h1>Brightleaf Finance Portal</h1><p class="muted">Sign in with your company account.</p>
+      <label>User name</label><input id="user"><label>Password</label><input id="password" type="password">
+      <div class="actions"><button id="signin">Sign in</button></div></div>`;
+  } else if (s.page === "home") {
+    const pending = INVOICES.filter(i => i.status === "Pending approval");
+    app.innerHTML = header("home") + `<main><h1>Good morning, Maria</h1><div class="tiles">
+      <div class="panel tile"><div class="muted">Invoices pending approval</div><div class="n">${pending.length}</div></div>
+      <div class="panel tile"><div class="muted">Due this week</div><div class="n">1</div></div>
+      <div class="panel tile"><div class="muted">Flagged for review</div><div class="n">${INVOICES.filter(i => i.status === "Flagged").length}</div></div>
+      </div></main>`;
+  } else if (s.page === "invoices") {
+    const rows = INVOICES.filter(i => s.filter === "All" || i.status === s.filter);
+    app.innerHTML = header("invoices") + `<main><h1>Invoices</h1><div class="panel"><div class="row">
+      <div style="width:260px"><label>Status</label><select id="status">${["All", "Pending approval", "Approved", "Flagged", "Paid"]
+        .map(o => `<option ${o === s.filter ? "selected" : ""}>${o}</option>`).join("")}</select></div>
+      <div style="flex:1"></div><button class="secondary" id="export">Export to CSV</button></div></div>
+      <div class="panel" style="padding:0"><table><thead><tr><th>Invoice</th><th>Vendor</th><th>Date</th><th>Due</th><th>PO</th><th class="num">Amount</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(i => `<tr class="link" id="row-${i.id}"><td>${i.id}</td><td>${i.vendor}</td><td>${i.date}</td><td>${i.due}</td><td>${i.po}</td>
+        <td class="num">${money(i.amount)}</td><td><span class="badge ${cls(i.status)}">${i.status}</span></td></tr>`).join("")}</tbody></table></div></main>`;
+  } else if (s.page === "invoice") {
+    const i = INVOICES.find(x => x.id === s.open);
+    app.innerHTML = header("invoices") + `<main><p class="muted"><a href="#" id="back">← Invoices</a></p><h1>${i.id} · ${i.vendor}</h1>
+      <div class="two"><div class="panel"><h3 style="margin-top:0">Invoice</h3><dl>
+        <dt>Status</dt><dd><span class="badge ${cls(i.status)}">${i.status}</span></dd><dt>Invoice date</dt><dd>${i.date}</dd><dt>Due date</dt><dd>${i.due}</dd>
+        <dt>Items</dt><dd>${i.items}</dd><dt>Amount</dt><dd>${money(i.amount)}</dd><dt>Purchase order</dt><dd>${i.po}</dd></dl></div>
+      <div class="panel" id="po-panel">${s.showPo ? `<h3 style="margin-top:0">Purchase order ${i.po}</h3><dl>
+        <dt>Approved by</dt><dd>Daniel Okafor</dd><dt>Items</dt><dd>${i.items}</dd><dt>PO amount</dt><dd>${money(i.poAmount)}</dd>
+        <dt>Difference</dt><dd style="color:${i.amount === i.poAmount ? "#166534" : "#b91c1c"}">${money(i.amount - i.poAmount)}</dd></dl>`
+        : `<h3 style="margin-top:0">Purchase order</h3><p class="muted">Not loaded.</p><button class="secondary" id="view-po">View purchase order</button>`}</div></div>
+      ${i.status === "Pending approval" ? `<div class="actions"><button id="approve">Approve</button><button class="danger" id="flag">Flag for review</button></div>` : ""}</main>`;
+  }
+  if (s.modal) {
+    const approve = s.modal === "approve";
+    app.innerHTML += `<div class="modal-bg"><div class="modal"><h2>${approve ? "Approve invoice" : "Flag invoice for review"}</h2>
+      <p class="muted">${s.open} · ${INVOICES.find(x => x.id === s.open).vendor}</p>
+      <label>${approve ? "Comment (optional)" : "Reason"}</label><textarea id="comment"></textarea>
+      <div class="actions"><button id="confirm" class="${approve ? "" : "danger"}">${approve ? "Confirm approval" : "Flag invoice"}</button>
+      <button class="secondary" id="cancel">Cancel</button></div></div></div>`;
+  }
+  if (s.toast) app.innerHTML += `<div class="toast">${s.toast}</div>`;
+  wire();
+}
+
+function on(id, ev, fn) { const el = document.getElementById(id); if (el) el.addEventListener(ev, e => { e.preventDefault(); fn(e); }); }
+function wire() {
+  on("signin", "click", () => set({ page: "home", toast: null }));
+  on("nav-home", "click", () => set({ page: "home", toast: null }));
+  on("nav-invoices", "click", () => set({ page: "invoices", toast: null }));
+  on("back", "click", () => set({ page: "invoices", open: null, showPo: false, toast: null }));
+  on("status", "change", e => set({ filter: e.target.value, toast: null }));
+  on("view-po", "click", () => set({ showPo: true }));
+  on("approve", "click", () => set({ modal: "approve" }));
+  on("flag", "click", () => set({ modal: "flag" }));
+  on("cancel", "click", () => set({ modal: null }));
+  on("confirm", "click", () => {
+    const i = INVOICES.find(x => x.id === state.open);
+    i.status = state.modal === "approve" ? "Approved" : "Flagged";
+    set({ modal: null, toast: `${i.id} ${i.status === "Approved" ? "approved" : "flagged for review"}.` });
+  });
+  on("export", "click", () => set({ toast: `Downloaded approved-invoices-2026-11-20.csv (${INVOICES.filter(i => i.status === "Approved").length} invoices)` }));
+  INVOICES.forEach(i => on("row-" + i.id, "click", () => set({ page: "invoice", open: i.id, showPo: false, toast: null })));
+}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+cache/
+.env
+.venv
+runs/
+__pycache__/
+.pytest_cache/
+videos/
+data/
+web/frontend/node_modules/
+web/frontend/dist/
+web/frontend/*.tsbuildinfo
+templates/translated/
